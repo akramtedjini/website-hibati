@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>For You</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500;600&display=swap');
+
+  :root{
+    --blue: #3F6B9E;
+    --blue-deep: #2A4D75;
+    --sky: #BFE0EE;
+    --skylight: #E3F2F8;
+    --ink: #1E3247;
+    --lavender: #8B7BB0;
+  }
+
+  *{box-sizing:border-box; -webkit-tap-highlight-color: transparent;}
+  html,body{
+    margin:0; padding:0; height:100%; overflow:hidden;
+    font-family:'Inter', sans-serif;
+    background: var(--sky);
+  }
+
+  /* ---- Watercolor sky background ---- */
+  .bg{
+    position:fixed; inset:0;
+    background:
+      radial-gradient(circle at 30% 15%, rgba(255,255,255,0.5), transparent 35%),
+      linear-gradient(160deg, #EAF6FA 0%, #CFE8F1 35%, #A9D2E6 70%, #8FC0DC 100%);
+    z-index:0;
+    overflow:hidden;
+    perspective: 700px;
+  }
+
+  .bg-deco{
+    position:absolute;
+    opacity:0.85;
+    filter: drop-shadow(0 4px 10px rgba(40,70,100,0.12));
+  }
+  .bg-deco.float-3d{
+    filter: none; /* shadow now lives on .heart-shape so it can pulse with the float */
+  }
+
+  /* --- Floating hearts with real volume ---
+     Each heart is wrapped in an outer "float-3d" element that only
+     handles the up/down drift + tilt (so the motion stays smooth
+     and undistorted), while an inner ".heart-shape" handles the
+     scale pulse, and a separate ".heart-shadow" beneath it grows/
+     shrinks and fades opposite to the scale — exactly like a real
+     object catching more light (bigger, sharper shadow) as it
+     drifts "closer", and less as it drifts "away". That paired
+     motion is what reads as volume instead of a flat sticker. */
+  .float-3d{
+    position:relative;
+    transform-style: preserve-3d;
+    animation: floatDrift var(--float-dur) cubic-bezier(.45,.05,.55,.95) infinite;
+    animation-delay: var(--float-delay);
+    will-change: transform;
+  }
+  .heart-shape{
+    display:block;
+    transform-style: preserve-3d;
+    animation: heartPulse var(--float-dur) cubic-bezier(.45,.05,.55,.95) infinite;
+    animation-delay: var(--float-delay);
+    filter: drop-shadow(0 6px 10px rgba(30,55,80,0.18));
+    will-change: transform;
+  }
+  .heart-shadow{
+    position:absolute;
+    left:50%; bottom:-6%;
+    width:62%; height:14%;
+    transform: translateX(-50%);
+    border-radius:50%;
+    background: radial-gradient(ellipse, rgba(20,40,65,0.30) 0%, rgba(20,40,65,0) 75%);
+    animation: shadowPulse var(--float-dur) cubic-bezier(.45,.05,.55,.95) infinite;
+    animation-delay: var(--float-delay);
+    will-change: transform, opacity;
+  }
+
+  @keyframes floatDrift{
+    0%   { transform: translateY(0)                         rotateX(0deg)                 rotateY(0deg); }
+    50%  { transform: translateY(calc(var(--drift-y) * -1))  rotateX(var(--tilt))          rotateY(calc(var(--tilt) * 0.6)); }
+    100% { transform: translateY(0)                          rotateX(0deg)                 rotateY(0deg); }
+  }
+  @keyframes heartPulse{
+    0%   { transform: scale(0.96); }
+    50%  { transform: scale(1.06); }
+    100% { transform: scale(0.96); }
+  }
+  @keyframes shadowPulse{
+    0%   { transform: translateX(-50%) scale(0.82); opacity:0.55; }
+    50%  { transform: translateX(-50%) scale(1.08); opacity:0.95; }
+    100% { transform: translateX(-50%) scale(0.82); opacity:0.55; }
+  }
+
+  .footer-note{
+    position:absolute; bottom: 22px; left:0; right:0;
+    text-align:center; font-size:11px; color:#3F5F7A; letter-spacing:0.05em;
+    z-index:2;
+  }
+
+
+  /* ---- Foreground card ---- */
+  .stage{
+    position:relative; z-index:2;
+    height:100%;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding: 6vh 6vw;
+    text-align:center;
+  }
+
+  .eyebrow{
+    font-family:'Inter'; font-weight:600; letter-spacing:0.22em;
+    text-transform:uppercase; font-size:11px; color:var(--blue-deep);
+    opacity:0.75; margin-bottom:14px;
+  }
+
+  h1{
+    font-family:'Playfair Display', serif;
+    font-style:italic;
+    font-weight:600;
+    color: var(--blue-deep);
+    font-size: clamp(26px, 6vw, 40px);
+    margin: 0 0 8px 0;
+    text-shadow: 0 2px 18px rgba(255,255,255,0.8);
+  }
+
+  .sub{
+    font-size:14px; color:#3F5F7A; margin-bottom:38px; max-width:320px;
+  }
+
+  /* ---- PIN dots ---- */
+  .pin-row{
+    display:flex; gap:14px; margin-bottom:34px;
+  }
+  .dot{
+    width:16px; height:16px; border-radius:50%;
+    border:1.5px solid var(--blue);
+    background: rgba(255,255,255,0.5);
+    transition: all 0.18s ease;
+  }
+  .dot.filled{
+    background: var(--blue);
+    box-shadow: 0 0 0 4px rgba(63,107,158,0.18);
+    transform: scale(1.08);
+  }
+  .pin-row.shake{
+    animation: shake 0.45s ease;
+  }
+  .pin-row.shake .dot{
+    border-color:#B23B3B;
+  }
+  @keyframes shake{
+    10%,90% { transform: translateX(-2px); }
+    20%,80% { transform: translateX(4px); }
+    30%,50%,70% { transform: translateX(-8px); }
+    40%,60% { transform: translateX(8px); }
+  }
+
+  .error-mark{
+    width:34px; height:34px;
+    opacity:0; transform: scale(0.5);
+    transition: all 0.25s ease;
+    margin-bottom: 10px;
+  }
+  .error-mark.show{ opacity:1; transform:scale(1); }
+  .error-mark svg{ width:100%; height:100%; }
+  .error-mark line{ stroke:#B23B3B; stroke-width:9; stroke-linecap:round; }
+
+  .hint{
+    height:18px;
+    font-size:12px; color:#B23B3B; font-weight:500;
+    opacity:0; transition: opacity 0.2s;
+    margin-top: -4px; margin-bottom: 22px;
+  }
+  .hint.show{ opacity:1; }
+
+  /* ---- Keypad ---- */
+  .keypad{
+    display:grid;
+    grid-template-columns: repeat(3, 64px);
+    gap: 16px;
+    z-index:2;
+  }
+  .key{
+    width:64px; height:64px; border-radius:50%;
+    border: none;
+    background: rgba(255,255,255,0.6);
+    backdrop-filter: blur(6px);
+    box-shadow: 0 4px 14px rgba(63,107,158,0.15), inset 0 0 0 1px rgba(63,107,158,0.22);
+    font-family:'Playfair Display', serif;
+    font-size: 22px; color: var(--blue-deep);
+    cursor:pointer;
+    transition: transform 0.08s ease, background 0.15s ease;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .key:active{
+    transform: scale(0.92);
+    background: rgba(63,107,158,0.2);
+  }
+  .key.empty{ visibility:hidden; pointer-events:none; }
+  .key.del{ font-family:'Inter'; font-size:13px; font-weight:600; letter-spacing:0.05em; }
+
+  @media (max-width: 360px){
+    .keypad{ grid-template-columns: repeat(3, 56px); gap:12px; }
+    .key{ width:56px; height:56px; font-size:19px; }
+  }
+</style>
+</head>
+<body>
+
+  <div class="bg" id="bg"></div>
+
+  <!-- ===== BACKGROUND MUSIC (plays continuously across all pages) ===== -->
+  <audio id="bgMusic" src="songs/song.mp3" loop preload="auto"></audio>
+  <script>
+    (function(){
+      const audio = document.getElementById('bgMusic');
+      const STORAGE_KEY = 'bgMusicTime';
+      const PLAYING_KEY = 'bgMusicPlaying';
+
+      // resume from where the song left off on the previous page
+      const savedTime = parseFloat(localStorage.getItem(STORAGE_KEY));
+      if (!isNaN(savedTime)) {
+        audio.currentTime = savedTime;
+      }
+
+      // if music was already playing before this page loaded, try
+      // to resume immediately (works once the user has interacted
+      // with the site at least once already, per browser autoplay rules)
+      if (localStorage.getItem(PLAYING_KEY) === 'true') {
+        audio.play().catch(() => {
+          // autoplay blocked — will start on the next tap/click below
+        });
+      }
+
+      // start (or resume) playback on the very first tap/click
+      // anywhere on the page, satisfying the browser's autoplay policy
+      function startOnFirstInteraction(){
+        if (audio.paused) {
+          audio.play().catch(() => {});
+        }
+        document.removeEventListener('click', startOnFirstInteraction);
+        document.removeEventListener('touchstart', startOnFirstInteraction);
+      }
+      document.addEventListener('click', startOnFirstInteraction);
+      document.addEventListener('touchstart', startOnFirstInteraction);
+
+      // continuously persist current time + playing state so the
+      // next page can pick up exactly where this one left off
+      setInterval(() => {
+        localStorage.setItem(STORAGE_KEY, audio.currentTime);
+        localStorage.setItem(PLAYING_KEY, (!audio.paused).toString());
+      }, 500);
+
+      // also save right before navigating away, for accuracy
+      window.addEventListener('beforeunload', () => {
+        localStorage.setItem(STORAGE_KEY, audio.currentTime);
+        localStorage.setItem(PLAYING_KEY, (!audio.paused).toString());
+      });
+    })();
+  </script>
+
+  <div class="stage">
+    <div class="eyebrow">a little something</div>
+    <h1>Only you can open this</h1>
+    <div class="sub">You know the number. You always do.</div>
+
+    <div class="error-mark" id="errorMark">
+      <svg viewBox="0 0 34 34">
+        <line x1="6" y1="6" x2="28" y2="28"/>
+        <line x1="28" y1="6" x2="6" y2="28"/>
+      </svg>
+    </div>
+
+    <div class="pin-row" id="pinRow">
+      <div class="dot" data-i="0"></div>
+      <div class="dot" data-i="1"></div>
+      <div class="dot" data-i="2"></div>
+      <div class="dot" data-i="3"></div>
+      <div class="dot" data-i="4"></div>
+      <div class="dot" data-i="5"></div>
+    </div>
+
+    <div class="hint" id="hint">try again, my love</div>
+
+    <div class="keypad" id="keypad">
+      <button class="key" data-n="1">1</button>
+      <button class="key" data-n="2">2</button>
+      <button class="key" data-n="3">3</button>
+      <button class="key" data-n="4">4</button>
+      <button class="key" data-n="5">5</button>
+      <button class="key" data-n="6">6</button>
+      <button class="key" data-n="7">7</button>
+      <button class="key" data-n="8">8</button>
+      <button class="key" data-n="9">9</button>
+      <button class="key empty"></button>
+      <button class="key" data-n="0">0</button>
+      <button class="key del" data-action="del">DEL</button>
+    </div>
+  </div>
+
+  <div class="footer-note">made for you, by me</div>
+
+<script>
+  const CORRECT_PIN = "200417";
+  // ▲▲▲ this is your secret code — change it here if you ever need to ▲▲▲
+
+  // 👉 change this to the filename of your next page (Page 2)
+  const NEXT_PAGE = "page2.html";
+
+  /* ---------------------------------------------------------
+     Watercolor-style decorative elements: clouds, a crescent
+     moon, soft blue hearts, and lavender flowers — scattered
+     around the edges so the PIN card stays the visual focus.
+  --------------------------------------------------------- */
+  function cloudSVG(){
+    return `<svg viewBox="0 0 140 80" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+      <g fill="#FFFFFF" opacity="0.9">
+        <ellipse cx="40" cy="50" rx="32" ry="20"/>
+        <ellipse cx="75" cy="38" rx="38" ry="26"/>
+        <ellipse cx="110" cy="52" rx="26" ry="17"/>
+      </g>
+    </svg>`;
+  }
+
+  function moonSVG(){
+    return `<svg viewBox="0 0 100 100" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="moonGrad" cx="35%" cy="35%" r="70%">
+          <stop offset="0%" stop-color="#F3F8FB"/>
+          <stop offset="100%" stop-color="#C9DEE9"/>
+        </radialGradient>
+      </defs>
+      <path d="M62 10 C 40 10, 22 28, 22 50 C 22 72, 40 90, 62 90 C 48 80, 40 66, 40 50 C 40 34, 48 20, 62 10 Z" fill="url(#moonGrad)"/>
+    </svg>`;
+  }
+
+  function heartSVG(shade){
+    return `<svg viewBox="0 0 100 90" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="hg-${shade}" cx="35%" cy="30%" r="75%">
+          <stop offset="0%" stop-color="#EAF4FA"/>
+          <stop offset="55%" stop-color="${shade}"/>
+          <stop offset="100%" stop-color="#2F5475"/>
+        </radialGradient>
+      </defs>
+      <path d="M50 84 C 18 60, 4 40, 4 24 C 4 8, 18 0, 30 0 C 40 0, 48 6, 50 14 C 52 6, 60 0, 70 0 C 82 0, 96 8, 96 24 C 96 40, 82 60, 50 84 Z" fill="url(#hg-${shade})" stroke="#2F5475" stroke-width="1" stroke-opacity="0.25"/>
+    </svg>`;
+  }
+
+  function flowerSVG(petal, dark){
+    return `<svg viewBox="0 0 100 100" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+      <g fill="${petal}" opacity="0.95">
+        <circle cx="50" cy="32" r="13"/>
+        <circle cx="50" cy="68" r="13"/>
+        <circle cx="32" cy="50" r="13"/>
+        <circle cx="68" cy="50" r="13"/>
+        <circle cx="37" cy="37" r="11"/>
+        <circle cx="63" cy="63" r="11"/>
+        <circle cx="63" cy="37" r="11"/>
+        <circle cx="37" cy="63" r="11"/>
+      </g>
+      <circle cx="50" cy="50" r="12" fill="${dark}"/>
+    </svg>`;
+  }
+
+  const bg = document.getElementById('bg');
+
+  const decorations = [
+    // clouds
+    { html: cloudSVG(), w: '34vw', top: '6%',  left: '-4%',  z: 1 },
+    { html: cloudSVG(), w: '30vw', top: '64%', left: '68%',  z: 1 },
+    // moon
+    { html: moonSVG(),  w: '15vw', top: '8%',  left: '34%',  z: 1 },
+    // hearts (blue watercolor), scattered corners + mid edges
+    { html: heartSVG('#6FA3C7'), w: '15vw', top: '14%', left: '4%',  z: 1, type:'heart' },
+    { html: heartSVG('#5B92BC'), w: '13vw', top: '30%', left: '78%', z: 1, type:'heart' },
+    { html: heartSVG('#6FA3C7'), w: '14vw', top: '54%', left: '8%',  z: 1, type:'heart' },
+    { html: heartSVG('#5B92BC'), w: '12vw', top: '66%', left: '82%', z: 1, type:'heart' },
+    { html: heartSVG('#6FA3C7'), w: '13vw', top: '82%', left: '20%', z: 1, type:'heart' },
+    // lavender / purple flowers in corners
+    { html: flowerSVG('#A89BCB', '#6B5B95'), w: '11vw', top: '4%',  left: '88%', z: 1 },
+    { html: flowerSVG('#9B86C2', '#5B4A85'), w: '9vw',  top: '2%',  left: '70%', z: 1 },
+    { html: flowerSVG('#A89BCB', '#6B5B95'), w: '10vw', top: '88%', left: '4%',  z: 1 },
+    { html: flowerSVG('#9B86C2', '#5B4A85'), w: '8vw',  top: '92%', left: '88%', z: 1 },
+    { html: flowerSVG('#B3A6D4', '#6B5B95'), w: '7vw',  top: '46%', left: '90%', z: 1 },
+    { html: flowerSVG('#A89BCB', '#6B5B95'), w: '7vw',  top: '40%', left: '2%',  z: 1 },
+  ];
+
+  decorations.forEach(d => {
+    const el = document.createElement('div');
+    el.className = 'bg-deco';
+    el.style.width = d.w;
+    el.style.top = d.top;
+    el.style.left = d.left;
+    el.style.zIndex = d.z;
+
+    if (d.type === 'heart'){
+      el.classList.add('float-3d');
+      // randomize each heart's float so they don't move in sync —
+      // duration, delay, drift distance, and rotation all vary,
+      // and the shadow shares the same timing so it stays in sync
+      // with the heart's apparent "closeness" as it drifts
+      el.style.setProperty('--float-dur', (6 + Math.random() * 3).toFixed(2) + 's');
+      el.style.setProperty('--float-delay', (Math.random() * 3).toFixed(2) + 's');
+      el.style.setProperty('--drift-y', (14 + Math.random() * 10).toFixed(0) + 'px');
+      el.style.setProperty('--tilt', (8 + Math.random() * 10).toFixed(0) + 'deg');
+
+      const shadow = document.createElement('div');
+      shadow.className = 'heart-shadow';
+      shadow.style.setProperty('--float-dur', el.style.getPropertyValue('--float-dur'));
+      shadow.style.setProperty('--float-delay', el.style.getPropertyValue('--float-delay'));
+
+      const shape = document.createElement('div');
+      shape.className = 'heart-shape';
+      shape.style.setProperty('--float-dur', el.style.getPropertyValue('--float-dur'));
+      shape.style.setProperty('--float-delay', el.style.getPropertyValue('--float-delay'));
+      shape.innerHTML = d.html;
+
+      el.appendChild(shadow);
+      el.appendChild(shape);
+    } else {
+      el.innerHTML = d.html;
+    }
+
+    bg.appendChild(el);
+  });
+
+  let entered = "";
+  const dots = document.querySelectorAll('.dot');
+  const pinRow = document.getElementById('pinRow');
+  const hint = document.getElementById('hint');
+  const errorMark = document.getElementById('errorMark');
+  const keypad = document.getElementById('keypad');
+
+  function renderDots(){
+    dots.forEach((d, i) => {
+      d.classList.toggle('filled', i < entered.length);
+    });
+  }
+
+  function lock(state){
+    keypad.style.pointerEvents = state ? 'none' : 'auto';
+  }
+
+  function wrongPin(){
+    pinRow.classList.add('shake');
+    errorMark.classList.add('show');
+    hint.classList.add('show');
+    lock(true);
+    setTimeout(() => {
+      pinRow.classList.remove('shake');
+      entered = "";
+      renderDots();
+      lock(false);
+    }, 550);
+  }
+
+  function correctPin(){
+    lock(true);
+    hint.classList.remove('show');
+    // little celebratory pulse before leaving
+    dots.forEach(d => d.style.transition = 'transform 0.3s ease');
+    dots.forEach(d => d.style.transform = 'scale(1.3)');
+    setTimeout(() => {
+      window.location.href = NEXT_PAGE;
+    }, 550);
+  }
+
+  function checkPin(){
+    if (entered.length < 6) return;
+    if (entered === CORRECT_PIN){
+      correctPin();
+    } else {
+      wrongPin();
+    }
+  }
+
+  keypad.addEventListener('click', (e) => {
+    const btn = e.target.closest('.key');
+    if (!btn || btn.classList.contains('empty')) return;
+
+    if (btn.dataset.action === 'del'){
+      entered = entered.slice(0, -1);
+      hint.classList.remove('show');
+      errorMark.classList.remove('show');
+      renderDots();
+      return;
+    }
+
+    if (entered.length >= 6) return;
+    entered += btn.dataset.n;
+    hint.classList.remove('show');
+    errorMark.classList.remove('show');
+    renderDots();
+
+    if (entered.length === 6){
+      checkPin();
+    }
+  });
+
+  // allow physical keyboard too (for testing on desktop)
+  document.addEventListener('keydown', (e) => {
+    if (/^[0-9]$/.test(e.key) && entered.length < 6){
+      entered += e.key;
+      hint.classList.remove('show');
+      errorMark.classList.remove('show');
+      renderDots();
+      if (entered.length === 6) checkPin();
+    } else if (e.key === 'Backspace'){
+      entered = entered.slice(0, -1);
+      renderDots();
+    }
+  });
+</script>
+
+</body>
+</html>
