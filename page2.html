@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>For You</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600&display=swap');
+
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html, body{
+    height:100%; width:100%;
+    overflow:hidden;
+    background: #FFF9F5;
+  }
+
+  .scene{
+    position:fixed; inset:0;
+    overflow:hidden;
+    background: radial-gradient(circle at 50% 20%, #fffaf6 0%, #faf0e8 55%, #f3e5e8 100%);
+    transition: background 1.6s ease, opacity 1.6s ease;
+  }
+  .scene.full{
+    background:
+      radial-gradient(circle at 30% 25%, rgba(255,255,255,0.4), transparent 45%),
+      radial-gradient(circle at 75% 70%, rgba(230,200,220,0.5), transparent 55%),
+      linear-gradient(155deg, #FBE9DD 0%, #F3D9E0 40%, #E8D2EA 75%, #DCC9E8 100%);
+  }
+  .scene.fading{ opacity: 0; }
+
+  /* depth haze so far flowers feel further away */
+  .haze{
+    position:absolute; inset:0;
+    background: radial-gradient(circle at 50% 50%, transparent 30%, rgba(255,250,247,0.5) 100%);
+    z-index:5; pointer-events:none;
+    transition: opacity 1.4s ease;
+  }
+  .scene.full .haze{ opacity:0; }
+
+  /* every flower starts exactly at screen center, then travels
+     outward along a straight line to its final resting offset
+     (--dx, --dy), like ripples expanding from a single source
+     until they fill the whole screen. Uses only `transform` so
+     the browser can animate on the GPU compositor — no layout
+     reflow, no jank, even with many flowers on screen at once. */
+  .flower-wrap{
+    position:absolute;
+    left: 50%;
+    top: 50%;
+    width: 0;
+    height: 0;
+    opacity:0;
+    will-change: transform, opacity;
+    backface-visibility: hidden;
+    transform: translate3d(0,0,0) scale(0.1) rotateZ(var(--rot));
+    transition:
+      opacity 0.6s ease,
+      transform var(--travel-dur) cubic-bezier(.22,.7,.25,1);
+  }
+  .flower-wrap.bloom{
+    opacity: var(--depth);
+    transform: translate3d(var(--dx), var(--dy), 0) scale(var(--scale)) rotateZ(var(--rot));
+  }
+  .flower-wrap .img{
+    position:absolute;
+    left:0; top:0;
+    transform: translate(-50%,-50%);
+    filter: drop-shadow(0 calc(var(--depth) * 8px) calc(var(--depth) * 10px) rgba(120,90,80,0.22));
+  }
+  .flower-wrap.soft-blur .img{
+    filter: drop-shadow(0 calc(var(--depth) * 8px) calc(var(--depth) * 10px) rgba(120,90,80,0.22)) blur(1px);
+  }
+  .flower-wrap.spin-slow .img{
+    animation: spinself linear infinite;
+    animation-duration: var(--spin-dur);
+  }
+  @keyframes spinself{
+    from { transform: translate(-50%,-50%) rotate(0deg); }
+    to   { transform: translate(-50%,-50%) rotate(360deg); }
+  }
+
+  .center-text{
+    position:absolute; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    z-index:500;
+    opacity:0;
+    transition: opacity 1s ease;
+    pointer-events:none;
+    text-align:center;
+    padding: 0 8vw;
+  }
+  .center-text.show{ opacity:1; }
+  .center-text p{
+    font-family:'Playfair Display', serif;
+    font-style:italic;
+    font-weight:500;
+    color:#6B3F52;
+    font-size: clamp(20px, 5vw, 30px);
+    background: rgba(255,255,255,0.65);
+    backdrop-filter: blur(6px);
+    padding: 16px 26px;
+    border-radius: 14px;
+    box-shadow: 0 8px 30px rgba(120,90,80,0.18);
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== BACKGROUND MUSIC (plays continuously across all pages) ===== -->
+<audio id="bgMusic" src="songs/song.mp3" loop preload="auto"></audio>
+<script>
+  (function(){
+    const audio = document.getElementById('bgMusic');
+    const STORAGE_KEY = 'bgMusicTime';
+    const PLAYING_KEY = 'bgMusicPlaying';
+
+    const savedTime = parseFloat(localStorage.getItem(STORAGE_KEY));
+    if (!isNaN(savedTime)) {
+      audio.currentTime = savedTime;
+    }
+
+    if (localStorage.getItem(PLAYING_KEY) === 'true') {
+      audio.play().catch(() => {});
+    }
+
+    function startOnFirstInteraction(){
+      if (audio.paused) {
+        audio.play().catch(() => {});
+      }
+      document.removeEventListener('click', startOnFirstInteraction);
+      document.removeEventListener('touchstart', startOnFirstInteraction);
+    }
+    document.addEventListener('click', startOnFirstInteraction);
+    document.addEventListener('touchstart', startOnFirstInteraction);
+
+    setInterval(() => {
+      localStorage.setItem(STORAGE_KEY, audio.currentTime);
+      localStorage.setItem(PLAYING_KEY, (!audio.paused).toString());
+    }, 500);
+
+    window.addEventListener('beforeunload', () => {
+      localStorage.setItem(STORAGE_KEY, audio.currentTime);
+      localStorage.setItem(PLAYING_KEY, (!audio.paused).toString());
+    });
+  })();
+</script>
+
+<div class="scene" id="scene">
+  <div class="haze"></div>
+  <div class="center-text" id="centerText"><p>Every flower, for you.</p></div>
+</div>
+
+<script>
+  const NEXT_PAGE = "page3.html"; // 👉 change if your page3 filename differs
+
+  const scene = document.getElementById('scene');
+  const centerText = document.getElementById('centerText');
+
+  /* ---------------------------------------------------------
+     Four realistic flower types — rose, daisy, hydrangea
+     cluster, peony — built from layered, rounded petal shapes
+     with soft radial shading, so the bloom reads like a real
+     painted flower rather than a flat geometric icon.
+  --------------------------------------------------------- */
+
+  function makeRose(base, dark, light){
+    const id = 'r' + Math.random().toString(36).slice(2,9);
+    return `
+    <svg width="120" height="120" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="${id}" cx="42%" cy="38%" r="68%">
+          <stop offset="0%" stop-color="${light}"/>
+          <stop offset="60%" stop-color="${base}"/>
+          <stop offset="100%" stop-color="${dark}"/>
+        </radialGradient>
+      </defs>
+      <g fill="url(#${id})" stroke="${dark}" stroke-width="0.5" stroke-opacity="0.4">
+        <!-- outer loose petals -->
+        <path d="M60 62 C 38 58, 22 70, 26 88 C 40 92, 56 82, 60 62 Z"/>
+        <path d="M60 62 C 82 58, 98 70, 94 88 C 80 92, 64 82, 60 62 Z"/>
+        <path d="M60 62 C 56 38, 68 22, 86 28 C 90 44, 78 58, 60 62 Z"/>
+        <path d="M60 62 C 64 38, 52 22, 34 28 C 30 44, 42 58, 60 62 Z"/>
+        <path d="M60 62 C 40 70, 30 92, 46 104 C 60 100, 64 80, 60 62 Z"/>
+        <path d="M60 62 C 80 70, 90 92, 74 104 C 60 100, 56 80, 60 62 Z"/>
+      </g>
+      <!-- mid swirl petals -->
+      <g fill="url(#${id})" stroke="${dark}" stroke-width="0.5" stroke-opacity="0.45">
+        <path d="M60 60 C 46 56, 38 42, 48 32 C 58 36, 62 48, 60 60 Z"/>
+        <path d="M60 60 C 74 56, 82 42, 72 32 C 62 36, 58 48, 60 60 Z"/>
+        <path d="M60 60 C 48 68, 40 80, 50 88 C 58 82, 60 70, 60 60 Z"/>
+        <path d="M60 60 C 72 68, 80 80, 70 88 C 62 82, 60 70, 60 60 Z"/>
+      </g>
+      <!-- inner swirl (rose center coil) -->
+      <g fill="${dark}" opacity="0.85">
+        <path d="M60 58 C 54 56, 52 50, 56 46 C 61 47, 63 53, 60 58 Z"/>
+      </g>
+      <g fill="${base}">
+        <circle cx="58" cy="52" r="5"/>
+      </g>
+    </svg>`;
+  }
+
+  function makeDaisy(petalColor, petalShade, centerColor){
+    const id = 'd' + Math.random().toString(36).slice(2,9);
+    const petals = [];
+    const n = 13;
+    for (let i = 0; i < n; i++){
+      const a = (i / n) * 360;
+      petals.push(
+        `<ellipse cx="60" cy="32" rx="6.5" ry="17" fill="url(#${id})" stroke="${petalShade}" stroke-width="0.4" stroke-opacity="0.4" transform="rotate(${a} 60 60)"/>`
+      );
+    }
+    return `
+    <svg width="120" height="120" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="${id}" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="${petalColor}"/>
+          <stop offset="100%" stop-color="${petalShade}"/>
+        </linearGradient>
+        <radialGradient id="${id}-c" cx="40%" cy="35%" r="70%">
+          <stop offset="0%" stop-color="#FFF6D6"/>
+          <stop offset="65%" stop-color="${centerColor}"/>
+          <stop offset="100%" stop-color="#B8801A"/>
+        </radialGradient>
+      </defs>
+      ${petals.join('')}
+      <circle cx="60" cy="60" r="14" fill="url(#${id}-c)" stroke="#9a6a14" stroke-width="0.5"/>
+      <g fill="#8a5a10" opacity="0.45">
+        <circle cx="55" cy="56" r="1"/><circle cx="64" cy="55" r="0.9"/>
+        <circle cx="58" cy="64" r="1"/><circle cx="65" cy="62" r="0.9"/>
+        <circle cx="60" cy="59" r="1.1"/><circle cx="53" cy="62" r="0.8"/>
+        <circle cx="67" cy="58" r="0.9"/>
+      </g>
+    </svg>`;
+  }
+
+  function makeHydrangea(base, dark, light){
+    const id = 'h' + Math.random().toString(36).slice(2,9);
+    // cluster of small 4-petal florets scattered to form one bloom
+    const florets = [];
+    const positions = [
+      [60,60,1.0],[40,46,0.75],[80,46,0.75],[40,76,0.75],[80,76,0.75],
+      [60,32,0.7],[60,90,0.7],[30,62,0.65],[90,62,0.65],
+      [48,30,0.55],[74,30,0.55],[48,92,0.55],[74,92,0.55]
+    ];
+    positions.forEach(([cx,cy,sc],i)=>{
+      florets.push(`
+        <g transform="translate(${cx},${cy}) scale(${sc})" fill="url(#${id})" stroke="${dark}" stroke-width="0.4" stroke-opacity="0.35">
+          <ellipse cx="0" cy="-7" rx="5.5" ry="7"/>
+          <ellipse cx="0" cy="7" rx="5.5" ry="7"/>
+          <ellipse cx="-7" cy="0" rx="7" ry="5.5"/>
+          <ellipse cx="7" cy="0" rx="7" ry="5.5"/>
+          <circle r="2.6" fill="${light}"/>
+        </g>`);
+    });
+    return `
+    <svg width="120" height="120" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="${id}" cx="35%" cy="30%" r="75%">
+          <stop offset="0%" stop-color="${light}"/>
+          <stop offset="55%" stop-color="${base}"/>
+          <stop offset="100%" stop-color="${dark}"/>
+        </radialGradient>
+      </defs>
+      ${florets.join('')}
+    </svg>`;
+  }
+
+  function makePeony(base, dark, light){
+    const id = 'p' + Math.random().toString(36).slice(2,9);
+    const layers = [];
+    // several rings of petals at decreasing radius, rotated offset,
+    // building a full ruffled peony head
+    const rings = [
+      {r: 30, n: 9,  rx: 9,  ry: 16, op: 0.9},
+      {r: 21, n: 8,  rx: 8,  ry: 14, op: 0.95},
+      {r: 12, n: 7,  rx: 7,  ry: 11, op: 1.0}
+    ];
+    rings.forEach((ring, ri) => {
+      for (let i = 0; i < ring.n; i++){
+        const a = (i / ring.n) * 360 + ri * 12;
+        layers.push(
+          `<ellipse cx="60" cy="${60 - ring.r}" rx="${ring.rx}" ry="${ring.ry}" fill="url(#${id})" opacity="${ring.op}" stroke="${dark}" stroke-width="0.4" stroke-opacity="0.35" transform="rotate(${a} 60 60)"/>`
+        );
+      }
+    });
+    return `
+    <svg width="120" height="120" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="${id}" cx="40%" cy="32%" r="72%">
+          <stop offset="0%" stop-color="${light}"/>
+          <stop offset="55%" stop-color="${base}"/>
+          <stop offset="100%" stop-color="${dark}"/>
+        </radialGradient>
+      </defs>
+      ${layers.join('')}
+      <circle cx="60" cy="58" r="6" fill="${light}" opacity="0.7"/>
+    </svg>`;
+  }
+
+  function makeFlowerSVG(type, base, dark, light, centerColor){
+    if (type === 'rose') return makeRose(base, dark, light);
+    if (type === 'daisy') return makeDaisy(base, dark, centerColor);
+    if (type === 'hydrangea') return makeHydrangea(base, dark, light);
+    return makePeony(base, dark, light);
+  }
+
+  /* pastel palette matching a soft floral-wallpaper look:
+     blush pink, cream, lavender, dusty mauve, soft yellow */
+  const palettes = [
+    { base:'#E8A9A0', dark:'#C97B6E', light:'#F8DCD2' }, // blush rose
+    { base:'#EFD8C8', dark:'#D2AF95', light:'#FFF3E8' }, // cream peach
+    { base:'#C9B8DD', dark:'#9D85BD', light:'#EDE3F5' }, // lavender
+    { base:'#F4EFE3', dark:'#D9CDB6', light:'#FFFFFF' }, // ivory
+    { base:'#E3C9A8', dark:'#BD9A6F', light:'#F7E8D2' }, // soft tan/yellow
+    { base:'#D9A6AE', dark:'#B97380', light:'#F2D8DD' }, // dusty mauve
+    { base:'#A9BFD9', dark:'#7E9EC2', light:'#E1EAF5' }  // soft periwinkle
+  ];
+  const centerColors = ['#E0A33C', '#D4943A', '#C98E3F'];
+  const flowerTypes = ['rose', 'daisy', 'hydrangea', 'peony'];
+
+  const flowers = [];
+
+  // Concentric rings expanding from the exact center of the screen.
+  // Ring 0 is closest to center, last ring reaches past the screen
+  // edges so corners get covered too. Counts are kept moderate so
+  // the animation stays smooth on phones (fewer DOM nodes + only
+  // outer/blurred flowers get a blur filter, which is the
+  // expensive part to render).
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const screenDiag = Math.sqrt(vw*vw + vh*vh);
+  const numRings = 6;
+  const maxRadius = screenDiag * 0.62; // px, reaches past corners
+
+  for (let ring = 0; ring < numRings; ring++){
+    const ringProgress = ring / (numRings - 1); // 0 -> 1
+    const radius = 30 + ringProgress * maxRadius; // px from center
+    const flowersInRing = 6 + ring * 4; // denser rings further out, packs the screen without overloading the DOM
+
+    for (let k = 0; k < flowersInRing; k++){
+      const angle = (k / flowersInRing) * 360 + (ring % 2 === 0 ? 0 : 16) + (Math.random()*8 - 4);
+      const rad = angle * Math.PI / 180;
+
+      // final offset from center, in plain pixels — used directly
+      // in a translate3d() so the browser can animate purely on
+      // the compositor thread (no layout/paint cost per frame)
+      const dx = Math.cos(rad) * radius;
+      const dy = Math.sin(rad) * radius;
+
+      const wrap = document.createElement('div');
+      wrap.className = 'flower-wrap';
+
+      // depth: nearer rings feel nearer/larger; mix in randomness
+      // so it doesn't look mechanically uniform
+      const depth = 0.4 + Math.random() * 0.6;
+      const scale = 0.45 + depth * 1.1;
+
+      wrap.style.setProperty('--depth', depth.toFixed(2));
+      wrap.style.setProperty('--scale', scale.toFixed(2));
+      wrap.style.setProperty('--rot', (Math.random() * 360 - 180) + 'deg');
+      wrap.style.setProperty('--dx', dx.toFixed(1) + 'px');
+      wrap.style.setProperty('--dy', dy.toFixed(1) + 'px');
+
+      // outer rings travel a touch slower so the eye reads the
+      // expansion as a continuous wave from center to edges
+      const travelDur = 1.0 + ringProgress * 1.1 + Math.random() * 0.25;
+      wrap.style.setProperty('--travel-dur', travelDur.toFixed(2) + 's');
+
+      const size = 44 + depth * 70;
+      wrap.style.zIndex = Math.round(depth * 100);
+
+      // stagger the bloom: inner rings leave center first, outer
+      // rings follow a beat later, creating the ripple-outward feel
+      const ringDelay = ring * 0.2;
+      const jitterDelay = Math.random() * 0.12;
+      wrap.style.transitionDelay = (ringDelay + jitterDelay).toFixed(2) + 's';
+
+      // only the farther-back, smaller flowers get a blur filter —
+      // keeps the expensive filter off most of the 30+ nodes
+      if (depth < 0.55){
+        wrap.classList.add('soft-blur');
+      }
+
+      const pal = palettes[Math.floor(Math.random() * palettes.length)];
+      const ftype = flowerTypes[Math.floor(Math.random() * flowerTypes.length)];
+      const centerColor = centerColors[Math.floor(Math.random() * centerColors.length)];
+      const imgHolder = document.createElement('div');
+      imgHolder.className = 'img';
+      imgHolder.style.width = size + 'px';
+      imgHolder.style.height = size + 'px';
+      imgHolder.innerHTML = makeFlowerSVG(ftype, pal.base, pal.dark, pal.light, centerColor);
+
+      // gentle continuous self-rotation once settled, only on a
+      // subset so the scene doesn't feel mechanically busy
+      if (Math.random() > 0.65){
+        wrap.classList.add('spin-slow');
+        wrap.style.setProperty('--spin-dur', (16 + Math.random() * 10) + 's');
+      }
+
+      wrap.appendChild(imgHolder);
+      scene.appendChild(wrap);
+      flowers.push(wrap);
+    }
+  }
+
+  // sequence timing
+  window.addEventListener('load', () => {
+    // double rAF ensures the browser has painted the flowers at
+    // their starting (center, scale 0.1) state before we flip the
+    // class that triggers the transition — otherwise some browsers
+    // skip straight to the end state with no visible animation
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        flowers.forEach(f => f.classList.add('bloom'));
+      });
+    });
+
+    // 2) screen settles into the full soft pastel-floral wash once
+    //    the ripple has reached the edges (outer ring delay ~1s +
+    //    travel ~2.3s)
+    setTimeout(() => {
+      scene.classList.add('full');
+    }, 3300);
+
+    // 3) show center line
+    setTimeout(() => {
+      centerText.classList.add('show');
+    }, 4000);
+
+    // 4) fade everything out
+    setTimeout(() => {
+      centerText.classList.remove('show');
+      scene.classList.add('fading');
+    }, 6000);
+
+    // 5) go to page 3
+    setTimeout(() => {
+      window.location.href = NEXT_PAGE;
+    }, 7400);
+  });
+</script>
+
+</body>
+</html>
